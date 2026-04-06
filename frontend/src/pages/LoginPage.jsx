@@ -21,9 +21,15 @@ const LoginPage = () => {
     try {
       await login(email, password);
       
-      // Redirect back to where they came from, or dashboard by default
-      const from = location.state?.from?.pathname || "/dashboard";
-      navigate(from, { replace: true });
+      // Read the stored redirect path from localStorage
+      const redirectPath = localStorage.getItem("redirectPath");
+      // Clear redirect path after using it
+      if (redirectPath) {
+        localStorage.removeItem("redirectPath");
+      }
+      
+      // Redirect to that page, or homepage "/" if it doesn't exist
+      navigate(redirectPath || "/", { replace: true });
     } catch (err) {
       if (err.message?.includes("401") || err.message?.includes("403")) {
         setError("Invalid email or password.");

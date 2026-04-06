@@ -1,9 +1,10 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { User, LogOut } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 const Header = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { isAuthenticated, user, logout } = useAuth();
 
   const isActive = (path) => location.pathname === path;
@@ -14,14 +15,23 @@ const Header = () => {
     return name.split(" ").map(n => n[0]).join("").toUpperCase().substring(0, 2);
   };
 
-  const NavLink = ({ to, children }) => {
+  const NavLink = ({ to, children, isProtected }) => {
     const activeClass = isActive(to)
       ? "text-primary border-b-2 border-secondary pb-1"
       : "text-on-surface-variant hover:text-primary hover:bg-surface-container-low pb-1";
 
+    const handleClick = (e) => {
+      if (isProtected && !isAuthenticated) {
+        e.preventDefault();
+        localStorage.setItem("redirectPath", to);
+        navigate("/login");
+      }
+    };
+
     return (
       <Link
         to={to}
+        onClick={handleClick}
         className={`font-headline text-lg tracking-tight transition-colors duration-300 ${activeClass}`}
       >
         {children}
@@ -37,9 +47,9 @@ const Header = () => {
         </Link>
         <div className="hidden md:flex items-center gap-10">
           <NavLink to="/">Home</NavLink>
-          <NavLink to="/papers">Publications</NavLink>
-          <NavLink to="/authors">Faculty</NavLink>
-          <NavLink to="/analytics">Analytics</NavLink>
+          <NavLink to="/papers" isProtected>Publications</NavLink>
+          <NavLink to="/authors" isProtected>Faculty</NavLink>
+          <NavLink to="/analytics" isProtected>Analytics</NavLink>
         </div>
         
         {isAuthenticated ? (
