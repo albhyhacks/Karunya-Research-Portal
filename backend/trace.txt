@@ -1,0 +1,37 @@
+python : Traceback 
+(most recent call 
+last):
+At line:1 char:1
++ python 
+init_sqlite.py > 
+init_error.txt 2>&1
++ ~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (Traceback (mo   
+ st recent call las    
+t)::String) [], Re    
+moteException
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+  File "C:\Users\User\O
+neDrive\Desktop\Sem2\Py
+thon Project\research-p
+ortal\backend\init_sqli
+te.py", line 3, in 
+<module>
+    from 
+app.models.paper 
+import Paper, Author, 
+PaperAuthor, Thesis
+ImportError: cannot 
+import name 'Thesis' 
+from 
+'app.models.paper' (C:\
+Users\User\OneDrive\Des
+ktop\Sem2\Python Projec
+t\research-portal\backe
+nd\app\models\paper.py)

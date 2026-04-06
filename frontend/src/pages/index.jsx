@@ -1,0 +1,7 @@
+export { default as LandingPage } from './LandingPage';
+export { default as PapersPage } from './PapersPage';
+export { default as AuthorsPage } from './AuthorsPage';
+export { default as AuthorProfilePage } from './AuthorProfilePage';
+export { default as AnalyticsPage } from './AnalyticsPage';
+export { default as AdminPage } from './AdminPage';
+export { default as LoginPage } from './LoginPage';
