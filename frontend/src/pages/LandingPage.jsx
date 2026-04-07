@@ -1,7 +1,19 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
+import { useAuth } from '../context/AuthContext';
 
 const LandingPage = () => {
+  const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
+
+  const handleProtectedAction = (e, path) => {
+    if (!isAuthenticated) {
+      e.preventDefault();
+      localStorage.setItem("redirectPath", path);
+      navigate("/login");
+    }
+  };
+
   return (
     <MainLayout>
       {/* Hero Section */}
@@ -17,7 +29,7 @@ const LandingPage = () => {
           </p>
           
           <div className="flex flex-col sm:flex-row gap-6 mb-20">
-            <Link to="/papers" className="bg-secondary text-on-primary px-10 py-5 text-sm font-bold uppercase tracking-widest hover:bg-secondary/90 transition-all flex items-center justify-center gap-3">
+            <Link to="/papers" onClick={(e) => handleProtectedAction(e, '/papers')} className="bg-secondary text-on-primary px-10 py-5 text-sm font-bold uppercase tracking-widest hover:bg-secondary/90 transition-all flex items-center justify-center gap-3">
               Browse Publications
               <span className="material-symbols-outlined">arrow_forward</span>
             </Link>
@@ -82,7 +94,7 @@ const LandingPage = () => {
               <p className="text-on-surface-variant leading-relaxed">
                 Find any paper by title, keyword, author or department using our comprehensive archival indexing system.
               </p>
-              <Link to="/papers" className="mt-auto text-secondary font-bold text-sm uppercase tracking-widest border-b border-secondary/20 w-fit pb-1 hover:border-secondary transition-all">
+              <Link to="/papers" onClick={(e) => handleProtectedAction(e, '/papers')} className="mt-auto text-secondary font-bold text-sm uppercase tracking-widest border-b border-secondary/20 w-fit pb-1 hover:border-secondary transition-all">
                 Explore Archives
               </Link>
             </div>
@@ -95,7 +107,7 @@ const LandingPage = () => {
               <p className="text-on-surface-variant leading-relaxed">
                 Comprehensive list of researchers and their publications, including specialized fields of study and academic history.
               </p>
-              <Link to="/authors" className="mt-auto text-secondary font-bold text-sm uppercase tracking-widest border-b border-secondary/20 w-fit pb-1 hover:border-secondary transition-all">
+              <Link to="/authors" onClick={(e) => handleProtectedAction(e, '/authors')} className="mt-auto text-secondary font-bold text-sm uppercase tracking-widest border-b border-secondary/20 w-fit pb-1 hover:border-secondary transition-all">
                 Meet Researchers
               </Link>
             </div>
@@ -108,7 +120,7 @@ const LandingPage = () => {
               <p className="text-on-surface-variant leading-relaxed">
                 Track citation counts and impact factors over time with real-time data visualization of institutional impact.
               </p>
-              <Link to="/analytics" className="mt-auto text-secondary font-bold text-sm uppercase tracking-widest border-b border-secondary/20 w-fit pb-1 hover:border-secondary transition-all">
+              <Link to="/analytics" onClick={(e) => handleProtectedAction(e, '/analytics')} className="mt-auto text-secondary font-bold text-sm uppercase tracking-widest border-b border-secondary/20 w-fit pb-1 hover:border-secondary transition-all">
                 View Dashboards
               </Link>
             </div>
