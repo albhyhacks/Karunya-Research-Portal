@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +10,8 @@ from ..models.user import User, Role
 from ..schemas.user import Token, UserRead, UserCreate
 from ..services.auth import AuthService
 from ..config import settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -89,3 +92,55 @@ async def login_for_access_token(
 @router.get("/me", response_model=UserRead)
 async def read_users_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+@router.post("/google", response_model=Token)
+async def google_login(
+    payload: dict,
+    db: AsyncSession = Depends(get_db)
+):
+    """Verify a Google ID token and log in the user if they already have an account."""
+    credential = payload.get("credential")
+    if not credential:
+        raise HTTPException(status_code=400, detail="Missing Google credential token")
+    
+    # Verify the token with Google's API
+    try:
+        from google.oauth2 import id_token
+        from google.auth.transport import requests as google_requests
+        id_info = id_token.verify_oauth2_token(
+            credential,
+            google_requests.Request(),
+            settings.GOOGLE_CLIENT_ID
+        )
+    except ValueError as e:
+        logger.warning(f"Google token verification failed: {e}")
+        raise HTTPException(status_code=401, detail="Invalid Google token")
+    
+    email = id_info.get("email")
+    if not email:
+        raise HTTPException(status_code=400, detail="Could not retrieve email from Google")
+    
+    # Check if user exists in our database
+    query = select(User).where(User.email == email)
+    result = await db.execute(query)
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        logger.warning(f"Google login blocked: No account found for {email}")
+        raise HTTPException(
+            status_code=403,
+            detail="No account found for this Google email. Please contact your administrator to get access."
+        )
+    
+    # Issue our own JWT token
+    access_token = AuthService.create_access_token(
+        data={"sub": user.email, "role": user.role}
+    )
+    logger.info(f"Google login success for {email}")
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "role": user.role,
+        "full_name": user.full_name
+    }

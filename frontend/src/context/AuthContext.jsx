@@ -33,23 +33,29 @@ export const AuthProvider = ({ children }) => {
   }, [fetchCurrentUser]);
 
   const login = async (email, password) => {
-    // We'll use a URLSearchParams for the OAuth2PasswordRequestForm
     const formData = new URLSearchParams();
     formData.append('username', email);
     formData.append('password', password);
 
-    // Using specialized login endpoint that accepts form data
     const response = await api.post("/api/auth/login", formData, {
       headers: { "Content-Type": "application/x-www-form-urlencoded" }
     });
 
     const { access_token, role, full_name } = response;
-    
     localStorage.setItem("authToken", access_token);
     localStorage.setItem("userRole", role);
-    
     setToken(access_token);
     setUser({ email, role, full_name });
+    return response;
+  };
+
+  const googleAuth = async (credential) => {
+    const response = await api.post("/api/auth/google", { credential });
+    const { access_token, role, full_name } = response;
+    localStorage.setItem("authToken", access_token);
+    localStorage.setItem("userRole", role);
+    setToken(access_token);
+    setUser({ role, full_name });
     return response;
   };
 
@@ -68,6 +74,7 @@ export const AuthProvider = ({ children }) => {
     token,
     isLoading,
     login,
+    googleAuth,
     logout,
     isAdmin: user?.role === "admin",
     isAuthenticated: !!user,

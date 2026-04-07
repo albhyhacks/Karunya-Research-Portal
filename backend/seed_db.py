@@ -14,14 +14,14 @@ async def init_db():
     async with SessionLocal() as db:
         # Check if admin already exists
         from sqlalchemy import select
-        result = await db.execute(select(User).where(User.email == "admin@karunya.edu"))
+        result = await db.execute(select(User).where(User.email == "admin@karunya.edu.in"))
         admin = result.scalar_one_or_none()
         
         if not admin:
             print("Creating default admin user...")
             admin = User(
                 id=uuid.uuid4(),
-                email="admin@karunya.edu",
+                email="admin@karunya.edu.in",
                 hashed_password=AuthService.get_password_hash("admin123"),
                 full_name="Portal Administrator",
                 role=Role.ADMIN
@@ -31,7 +31,7 @@ async def init_db():
             # Create a test faculty user too
             faculty = User(
                 id=uuid.uuid4(),
-                email="faculty@karunya.edu",
+                email="faculty@karunya.edu.in",
                 hashed_password=AuthService.get_password_hash("faculty123"),
                 full_name="Test Faculty Member",
                 role=Role.USER
@@ -40,8 +40,8 @@ async def init_db():
             
             await db.commit()
             print("Database seeded successfully with:")
-            print("  Admin: admin@karunya.edu / admin123")
-            print("  Faculty: faculty@karunya.edu / faculty123")
+            print("  Admin: admin@karunya.edu.in / admin123")
+            print("  Faculty: faculty@karunya.edu.in / faculty123")
         else:
             print("Admin user already exists. Skipping seed.")
 
