@@ -19,8 +19,15 @@ const LoginPage = () => {
     setError("");
     try {
       await login(email, password);
-      const from = location.state?.from?.pathname || "/dashboard";
-      navigate(from, { replace: true });
+      // Read the stored redirect path from localStorage
+      const redirectPath = localStorage.getItem("redirectPath");
+      // Clear redirect path after using it
+      if (redirectPath) {
+        localStorage.removeItem("redirectPath");
+      }
+      
+      // Redirect to that page, or homepage "/dashboard" if it doesn't exist
+      navigate(redirectPath || "/dashboard", { replace: true });
     } catch (err) {
       if (err.message?.includes("401") || err.message?.includes("403")) {
         setError("Invalid email or password.");
@@ -36,8 +43,15 @@ const LoginPage = () => {
     setError("");
     try {
       await googleAuth(response.credential);
-      const from = location.state?.from?.pathname || "/dashboard";
-      navigate(from, { replace: true });
+      // Read the stored redirect path from localStorage
+      const redirectPath = localStorage.getItem("redirectPath");
+      // Clear redirect path after using it
+      if (redirectPath) {
+        localStorage.removeItem("redirectPath");
+      }
+      
+      // Redirect to that page, or homepage "/dashboard" if it doesn't exist
+      navigate(redirectPath || "/dashboard", { replace: true });
     } catch (err) {
       if (err.message?.includes("403")) {
         setError("No account found for this Google email. Please contact your administrator to get access.");
