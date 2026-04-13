@@ -11,13 +11,7 @@ export const authorsApi = {
   getPapers: (id, params) => api.get(`/api/authors/${id}/papers`, params),
 };
 
-export const analyticsApi = {
-  getOverview: () => api.get("/api/analytics/overview"),
-  getYearlyOutput: () => api.get("/api/analytics/yearly-output"),
-  getTopJournals: () => api.get("/api/analytics/top-journals"),
-  getTopKeywords: () => api.get("/api/analytics/top-keywords"),
-  getDepartmentBreakdown: () => api.get("/api/analytics/department-breakdown"),
-};
+// analyticsApi moved to analytics.js
 
 export const adminApi = {
   triggerSync: (mode) => api.post(`/api/admin/sync?mode=${mode}`, {}),

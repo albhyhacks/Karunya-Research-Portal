@@ -5,3 +5,5 @@ export { default as AuthorProfilePage } from './AuthorProfilePage';
 export { default as AnalyticsPage } from './AnalyticsPage';
 export { default as AdminPage } from './AdminPage';
 export { default as LoginPage } from './LoginPage';
+export { default as DashboardPage } from './DashboardPage';
+export { default as ProfilePage } from './ProfilePage';

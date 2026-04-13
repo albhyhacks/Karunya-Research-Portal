@@ -34,3 +34,16 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     email: Optional[str] = None
     role: Optional[Role] = None
+
+class PasswordChangeRequest(BaseModel):
+    old_password: str
+    new_password: str
+    confirm_password: str
+
+class LoginEventRead(BaseModel):
+    id: uuid.UUID
+    timestamp: datetime
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    
+    model_config = ConfigDict(from_attributes=True)

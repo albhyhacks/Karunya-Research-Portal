@@ -38,6 +38,8 @@ class Paper(Base):
     citation_count: Mapped[int] = mapped_column(Integer, default=0)
     journal_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     journal_issn: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    document_type: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    countries: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
     keywords: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())

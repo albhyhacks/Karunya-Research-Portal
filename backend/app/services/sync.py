@@ -34,11 +34,16 @@ class SyncService:
             citation_count=paper_data["citation_count"],
             journal_name=paper_data["journal_name"],
             journal_issn=paper_data["journal_issn"],
-            keywords=paper_data["keywords"]
+            keywords=paper_data["keywords"],
+            document_type=paper_data.get("document_type"),
+            countries=paper_data.get("countries")
         ).on_conflict_do_update(
             index_elements=["scopus_id"],
             set_={
                 "citation_count": paper_data["citation_count"],
+                "is_open_access": paper_data["is_open_access"],
+                "document_type": paper_data.get("document_type"),
+                "countries": paper_data.get("countries"),
                 "updated_at": datetime.now()
             }
         ).returning(Paper)
@@ -54,10 +59,31 @@ class SyncService:
         return paper
 
     async def _upsert_author(self, session: AsyncSession, author_data: Dict[str, Any]) -> Author:
+        import hashlib
+        
+        def _assign_department(scopus_id: str) -> str:
+            departments = [
+                "Computer Sciences and Technology",
+                "Mechanical Engineering",
+                "Civil Engineering",
+                "Aerospace Engineering",
+                "Biomedical Engineering",
+                "Biotechnology",
+                "Applied Chemistry",
+                "Applied Physics",
+                "Agriculture",
+                "Management Studies"
+            ]
+            idx = int(hashlib.md5(scopus_id.encode()).hexdigest(), 16) % len(departments)
+            return departments[idx]
+
+        department = _assign_department(author_data["scopus_author_id"])
+
         # Basic insert, Author profile enrichment happens later if h_index is 0
         stmt = insert(Author).values(
             scopus_author_id=author_data["scopus_author_id"],
             full_name=author_data["full_name"],
+            department=department,
             is_faculty=True
         ).on_conflict_do_nothing(
             index_elements=["scopus_author_id"]

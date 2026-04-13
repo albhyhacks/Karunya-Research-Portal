@@ -59,10 +59,36 @@ class ScopusClient:
             })
         return authors
 
-    def _normalize_paper(self, entry: Dict[str, Any]) -> Dict[str, Any]:
-        """Normalize a single Scopus entry into PaperData format."""
+    def _normalize_paper(self, entry: Dict[str, Any], top_level_affiliation: Optional[List] = None, keywords_raw: Optional[str] = None) -> Dict[str, Any]:
+        """Normalize a single Scopus entry into PaperData format.
+        
+        Handles both:
+        - Search result entries (flat structure with affiliation/keywords at root)
+        - Abstract Retrieval entries (coredata dict, top-level affiliation separate)
+        """
         scopus_id = entry.get("dc:identifier", "").replace("SCOPUS_ID:", "")
         authors = self._normalize_authors(entry)
+
+        # Affiliations: prefer explicitly passed top_level_affiliation (from Abstract API)
+        # otherwise read from flattened search entry root
+        affiliations = top_level_affiliation if top_level_affiliation is not None else entry.get("affiliation", [])
+        if isinstance(affiliations, dict):
+            affiliations = [affiliations]
+        countries = [aff.get("affiliation-country", "") for aff in (affiliations or []) if aff.get("affiliation-country")]
+        countries = list(set(countries))
+        
+        # Open access: Abstract API uses 'openaccess' string "1"/"0", or bool
+        oa = entry.get("openaccess", 0)
+        is_oa = str(oa).lower() in ("1", "true")
+
+        # Keywords: prefer explicitly passed raw string (from coredata authkeywords)
+        kw_raw = keywords_raw if keywords_raw is not None else entry.get("authkeywords", "")
+        if kw_raw and isinstance(kw_raw, str):
+            keywords = [k.strip() for k in kw_raw.split(" | ") if k.strip()]
+        elif isinstance(kw_raw, list):
+            keywords = kw_raw
+        else:
+            keywords = []
 
         return {
             "scopus_id": scopus_id,
@@ -70,16 +96,22 @@ class ScopusClient:
             "abstract": entry.get("dc:description", ""), 
             "year": entry.get("prism:coverDate", "")[:4],
             "doi": entry.get("prism:doi", ""),
-            "is_open_access": entry.get("openaccess") == "1",
+            "is_open_access": is_oa,
             "citation_count": int(entry.get("citedby-count", 0)),
             "journal_name": entry.get("prism:publicationName", ""),
-            "journal_issn": entry.get("prism:issn", ""),
-            "keywords": entry.get("authkeywords", "").split(" | ") if entry.get("authkeywords") else [],
-            "authors": authors
+            "journal_issn": entry.get("prism:issn", entry.get("prism:eIssn", "")),
+            "keywords": keywords,
+            "authors": authors,
+            "document_type": entry.get("subtype", ""),
+            "countries": countries
         }
 
     async def search_papers(self, affiliation_id: str, query: str = "", start: int = 0, count: int = 25, sort: str = "citedby-count") -> Dict[str, Any]:
-        full_query = f"AF-ID({affiliation_id})"
+        if affiliation_id.isdigit():
+            full_query = f"AF-ID({affiliation_id})"
+        else:
+            full_query = f"AFFIL(\"{affiliation_id}\")"
+        
         if query:
             full_query += f" AND {query}"
         
@@ -88,7 +120,7 @@ class ScopusClient:
             "count": count,
             "start": start,
             "sort": sort,
-            "field": "dc:title,dc:identifier,prism:coverDate,prism:doi,citedby-count,prism:publicationName,prism:issn,authkeywords,author,@auid"
+            "field": "dc:title,dc:identifier,prism:coverDate,prism:doi,citedby-count,prism:publicationName,prism:issn,authkeywords,author,@auid,subtype,openaccess,affiliation"
         }
         
         data = await self._request("GET", "search/scopus", params=params)
@@ -108,15 +140,61 @@ class ScopusClient:
 
     async def get_paper_details(self, scopus_id: str) -> Dict[str, Any]:
         """Fetch full metadata for a paper using Abstract Retrieval API."""
-        data = await self._request("GET", f"abstract/scopus_id/{scopus_id}")
-        # Note: Key is plural 'abstracts-retrieval-response'
-        response = data.get("abstracts-retrieval-response", {})
-        coredata = response.get("coredata", {})
-        authors_info = response.get("authors", {})
+        data = await self._request("GET", f"abstract/scopus_id/{scopus_id}", params={
+            "field": "authors,affiliation,coredata,authkeywords"
+        })
+        response = data.get("abstracts-retrieval-response") or {}
+        coredata = response.get("coredata") or {}
         
+        # Full authors live at top-level 'authors' -> 'author' when field=authors requested
+        authors_section = response.get("authors") or {}
+        authors_list = authors_section.get("author", []) if authors_section else []
+        if isinstance(authors_list, dict):
+            authors_list = [authors_list]
+        
+        # Keywords in Abstract API are in coredata under 'authkeywords'  
+        keywords_raw = coredata.get("authkeywords", "")
+        
+        # Abstract API: affiliations live at TOP LEVEL of response, NOT inside coredata
+        top_level_affiliations = response.get("affiliation", [])
+        if isinstance(top_level_affiliations, dict):
+            top_level_affiliations = [top_level_affiliations]
+        
+        # Build normalized authors from full author list
+        normalized_authors = []
+        for i, auth in enumerate(authors_list):
+            pref = auth.get("preferred-name", {})
+            given = pref.get("ce:given-name", auth.get("ce:given-name", auth.get("given-name", "")))
+            surname = pref.get("ce:surname", auth.get("ce:surname", auth.get("surname", "")))
+            full_name = f"{given} {surname}".strip()
+            normalized_authors.append({
+                "scopus_author_id": auth.get("@auid", auth.get("authid", "")),
+                "full_name": full_name,
+                "position": int(auth.get("@seq", i + 1)),
+                "is_corresponding": False
+            })
+        
+        # If no authors found from full section, fall back to dc:creator
+        if not normalized_authors:
+            creator_data = coredata.get("dc:creator", {})
+            if isinstance(creator_data, dict):
+                for auth in creator_data.get("author", []):
+                    pref = auth.get("preferred-name", {})
+                    given = pref.get("ce:given-name", auth.get("ce:given-name", ""))
+                    surname = pref.get("ce:surname", auth.get("ce:surname", ""))
+                    normalized_authors.append({
+                        "scopus_author_id": auth.get("@auid", ""),
+                        "full_name": f"{given} {surname}".strip(),
+                        "position": int(auth.get("@seq", 1)),
+                        "is_corresponding": False
+                    })
+
         # Combine coredata with authors info for normalization
-        entry = {**coredata, "authors": authors_info, "abstract": coredata.get("dc:description", "")}
-        return self._normalize_paper(entry)
+        entry = {**coredata, "authors": {"author": authors_list}, "abstract": coredata.get("dc:description", "")}
+        result = self._normalize_paper(entry, top_level_affiliation=top_level_affiliations, keywords_raw=keywords_raw)
+        result["authors"] = normalized_authors  # override with properly parsed list
+        return result
+
 
     async def get_author(self, scopus_author_id: str) -> Dict[str, Any]:
         params = {"httpAccept": "application/json"}
@@ -141,13 +219,18 @@ class ScopusClient:
         count = 25
         total = 1 # Initial value to enter loop
         
+        if affiliation_id.isdigit():
+            query_str = f"AF-ID({affiliation_id})"
+        else:
+            query_str = f"AFFIL(\"{affiliation_id}\")"
+            
         while start < total:
             data = await self._request("GET", "search/scopus", params={
-                "query": f"AF-ID({affiliation_id})",
+                "query": query_str,
                 "count": count,
                 "start": start,
                 "sort": "citedby-count",
-                "field": "dc:title,dc:identifier,prism:coverDate,prism:doi,citedby-count,prism:publicationName,prism:issn,authkeywords,author,@auid"
+                "field": "dc:title,dc:identifier,prism:coverDate,prism:doi,citedby-count,prism:publicationName,prism:issn,authkeywords,author,@auid,subtype,openaccess,affiliation"
             })
             
             results = data.get("search-results", {})

@@ -1,7 +1,26 @@
 import Sidebar from './Sidebar';
 import Footer from './Footer';
+import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import NotificationDropdown from './NotificationDropdown';
+import { api } from '../../api/client';
 
 const DashboardLayout = ({ title, subtitle, children }) => {
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    const fetchUnreadCount = async () => {
+      try {
+        const data = await api.get("/api/notifications/unread-count");
+        setUnreadCount(data.count);
+      } catch (error) {
+        console.error("Failed to fetch unread count:", error);
+      }
+    };
+    fetchUnreadCount();
+  }, []);
+
   return (
     <div className="bg-surface text-on-surface font-body min-h-screen flex">
       <Sidebar />
@@ -22,8 +41,25 @@ const DashboardLayout = ({ title, subtitle, children }) => {
               />
             </div>
             <div className="flex items-center gap-6">
-              <button className="material-symbols-outlined text-primary hover:opacity-80 transition-opacity">notifications</button>
-              <button className="material-symbols-outlined text-primary hover:opacity-80 transition-opacity">account_circle</button>
+              <div className="relative">
+                <button 
+                  onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+                  className="material-symbols-outlined text-primary hover:opacity-80 transition-opacity"
+                >
+                  notifications
+                </button>
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-error text-[10px] font-bold text-white shadow-sm animate-in zoom-in duration-300">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+                <NotificationDropdown 
+                  isOpen={isNotificationsOpen} 
+                  onClose={() => setIsNotificationsOpen(false)}
+                  onUnreadUpdate={setUnreadCount}
+                />
+              </div>
+              <Link to="/profile" className="material-symbols-outlined text-primary hover:opacity-80 transition-opacity">account_circle</Link>
             </div>
           </div>
         </header>
@@ -34,7 +70,7 @@ const DashboardLayout = ({ title, subtitle, children }) => {
         
         {/* Dashboard inner footer */}
         <footer className="px-10 py-12 bg-surface-container border-t border-outline/5 mt-auto w-full">
-          <div className="flex flex-col md:flex-row justify-between items-centermd:items-end">
+          <div className="flex flex-col md:flex-row justify-between items-center md:items-end">
             <div className="mb-4 md:mb-0">
               <p className="text-primary font-bold tracking-tighter mb-1 uppercase text-sm">Karunya Institute of Technology and Sciences</p>
               <p className="text-[10px] text-on-surface-variant/60 uppercase tracking-widest">© {new Date().getFullYear()} Karunya Portal. All intellectual assets protected.</p>

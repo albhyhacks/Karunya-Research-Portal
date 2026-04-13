@@ -6,7 +6,9 @@ import {
   AnalyticsPage, 
   AdminPage, 
   AuthorProfilePage,
-  LoginPage
+  LoginPage,
+  DashboardPage,
+  ProfilePage
 } from "./pages";
 import ProtectedRoute from "./components/layout/ProtectedRoute";
 import { AuthProvider } from "./context/AuthContext";
@@ -26,7 +28,8 @@ const App = () => {
           <Route path="/analytics" element={<AnalyticsPage />} />
           
           <Route element={<ProtectedRoute />}>
-            <Route path="/dashboard" element={<PapersPage />} />
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
           </Route>
           
           <Route element={<ProtectedRoute requiredRole="admin" />}>

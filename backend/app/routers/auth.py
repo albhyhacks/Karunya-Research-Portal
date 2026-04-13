@@ -3,11 +3,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import Optional
+from typing import Optional, List
+from fastapi import Request
 
 from ..database import get_db
-from ..models.user import User, Role
-from ..schemas.user import Token, UserRead, UserCreate
+from ..models.user import User, Role, LoginEvent
+from ..schemas.user import Token, UserRead, UserCreate, PasswordChangeRequest, LoginEventRead
 from ..services.auth import AuthService
 from ..config import settings
 
@@ -55,6 +56,7 @@ async def get_current_admin(
 
 @router.post("/login", response_model=Token)
 async def login_for_access_token(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db)
 ):
@@ -82,6 +84,15 @@ async def login_for_access_token(
         data={"sub": user.email, "role": user.role}
     )
     
+    # Record Login Event
+    login_event = LoginEvent(
+        user_id=user.id,
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent")
+    )
+    db.add(login_event)
+    await db.commit()
+    
     return {
         "access_token": access_token, 
         "token_type": "bearer", 
@@ -95,6 +106,7 @@ async def read_users_me(current_user: User = Depends(get_current_user)):
 
 @router.post("/google", response_model=Token)
 async def google_login(
+    request: Request,
     payload: dict,
     db: AsyncSession = Depends(get_db)
 ):
@@ -136,6 +148,16 @@ async def google_login(
     access_token = AuthService.create_access_token(
         data={"sub": user.email, "role": user.role}
     )
+    
+    # Record Login Event
+    login_event = LoginEvent(
+        user_id=user.id,
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent")
+    )
+    db.add(login_event)
+    await db.commit()
+    
     logger.info(f"Google login success for {email}")
     
     return {
@@ -144,3 +166,35 @@ async def google_login(
         "role": user.role,
         "full_name": user.full_name
     }
+
+@router.post("/change-password")
+async def change_password(
+    payload: PasswordChangeRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    if payload.new_password != payload.confirm_password:
+        raise HTTPException(status_code=400, detail="New passwords do not match")
+        
+    if not AuthService.verify_password(payload.old_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Incorrect current password")
+        
+    current_user.hashed_password = AuthService.get_password_hash(payload.new_password)
+    db.add(current_user)
+    await db.commit()
+    return {"message": "Password updated successfully"}
+
+@router.get("/login-history", response_model=List[LoginEventRead])
+async def get_login_history(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    from sqlalchemy import desc
+    query = (
+        select(LoginEvent)
+        .where(LoginEvent.user_id == current_user.id)
+        .order_by(desc(LoginEvent.timestamp))
+        .limit(10)
+    )
+    result = await db.execute(query)
+    return result.scalars().all()

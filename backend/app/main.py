@@ -8,7 +8,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-from .routers import papers, authors, analytics, admin, auth
+from .routers import papers, authors, analytics, admin, auth, notifications
 from .database import engine
 from .config import settings
 
@@ -58,6 +58,7 @@ app.include_router(authors.router, prefix="/api/authors", tags=["Authors"])
 app.include_router(analytics.router, prefix="/api/analytics", tags=["Analytics"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
+app.include_router(notifications.router, prefix="/api/notifications", tags=["Notifications"])
 
 # Global Exception Handler
 @app.exception_handler(Exception)
