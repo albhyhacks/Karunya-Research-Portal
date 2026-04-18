@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useFetch } from "../hooks/useFetch";
-import { api } from "../api/client";
+import { authorsApi } from "../api/papers";
 import Sidebar from "../components/layout/Sidebar";
 
 const AuthorProfilePage = () => {
@@ -9,7 +9,7 @@ const AuthorProfilePage = () => {
   const [activeTab, setActiveTab] = useState("publications");
   
   // Fetch detailed author info which includes their papers
-  const { data: author, loading, error } = useFetch(() => api.get(`/api/v1/authors/${id}`), [id]);
+  const { data: author, loading, error } = useFetch(() => authorsApi.get(id), [id]);
 
   if (loading) {
     return (
@@ -45,7 +45,7 @@ const AuthorProfilePage = () => {
     return name.substring(0, 2).toUpperCase();
   };
 
-  const papersList = author.papers || [];
+  const papersList = author?.recent_papers || author?.papers || [];
 
   return (
     <div className="bg-surface text-on-surface font-body flex min-h-screen overflow-x-hidden">
@@ -85,7 +85,7 @@ const AuthorProfilePage = () => {
           </div>
           <div className="border border-secondary px-6 py-2 flex items-center gap-3">
             <span className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Publications</span>
-            <span className="text-xl font-headline font-bold text-primary">{papersList.length}</span>
+            <span className="text-xl font-headline font-bold text-primary">{author.papers_count || papersList.length}</span>
           </div>
         </div>
 

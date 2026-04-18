@@ -19,6 +19,7 @@ async def get_papers(
     author_id: Optional[UUID] = Query(None),
     department: Optional[str] = Query(None),
     is_open_access: Optional[bool] = Query(None),
+    collaboration: Optional[str] = Query("all", enum=["all", "internal", "collaborative"]),
     sort: str = Query("year_desc", enum=["citations_desc", "citations_asc", "year_desc", "year_asc"]),
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=50),
@@ -33,6 +34,28 @@ async def get_papers(
         .scalar_subquery()
     )
     query = select(Paper).where(Paper.id.in_(karunya_paper_ids))
+    
+    # Collaboration logic
+    if collaboration == "internal":
+        # Papers where absolutely NO external authors exist
+        external_paper_ids = (
+            select(PaperAuthor.paper_id)
+            .join(Author, Author.id == PaperAuthor.author_id)
+            .where(Author.is_faculty == False)
+            .distinct()
+            .scalar_subquery()
+        )
+        query = query.where(~Paper.id.in_(external_paper_ids))
+    elif collaboration == "collaborative":
+        # Papers where AT LEAST ONE external author exists
+        external_paper_ids = (
+            select(PaperAuthor.paper_id)
+            .join(Author, Author.id == PaperAuthor.author_id)
+            .where(Author.is_faculty == False)
+            .distinct()
+            .scalar_subquery()
+        )
+        query = query.where(Paper.id.in_(external_paper_ids))
     
     # Simple search for SQLite compatibility
     if q:

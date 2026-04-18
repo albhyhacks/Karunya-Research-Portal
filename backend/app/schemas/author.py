@@ -10,6 +10,7 @@ class AuthorBase(BaseModel):
     designation: Optional[str] = None
     h_index: int = 0
     citation_count: int = 0
+    papers_count: int = 0
     is_faculty: bool = True
 
 class AuthorSummary(AuthorBase):

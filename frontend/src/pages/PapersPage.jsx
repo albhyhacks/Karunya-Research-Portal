@@ -174,6 +174,7 @@ const PapersPage = () => {
     const params = { q: debouncedQuery, page: page.toString() };
     if (filters.year_from) params.year_from = filters.year_from;
     if (filters.year_to) params.year_to = filters.year_to;
+    if (filters.collaboration) params.collaboration = filters.collaboration;
     setSearchParams(params, { replace: true });
   }, [debouncedQuery, page, filters, setSearchParams]);
 
@@ -219,10 +220,22 @@ const PapersPage = () => {
               </div>
             </div>
             
-            <div className="col-span-6 md:col-span-5 flex justify-end gap-4 pb-1">
+            <div className="col-span-6 md:col-span-5 flex items-end justify-end gap-4 pb-1">
+              <div className="flex flex-col space-y-2">
+                <label className="uppercase tracking-widest text-[10px] font-bold text-outline text-right">Collaboration</label>
+                <select 
+                  className="bg-transparent border-0 border-b border-outline/30 focus:border-secondary focus:ring-0 text-sm py-2 text-right appearance-none font-bold"
+                  value={filters.collaboration || "all"}
+                  onChange={e => updateFilters({ collaboration: e.target.value === "all" ? null : e.target.value })}
+                >
+                  <option value="all">All Papers</option>
+                  <option value="internal">Internal Only (Karunya)</option>
+                  <option value="collaborative">Collaborative (External)</option>
+                </select>
+              </div>
               <button 
-                onClick={() => updateFilters({ year_from: null, year_to: null, is_open_access: null })}
-                className="text-[10px] uppercase font-bold text-secondary underline underline-offset-4 decoration-secondary/30 hidden md:block"
+                onClick={() => updateFilters({ year_from: null, year_to: null, is_open_access: null, collaboration: null })}
+                className="text-[10px] uppercase font-bold text-secondary underline underline-offset-4 decoration-secondary/30 hidden md:block mb-3"
               >
                 Clear all
               </button>

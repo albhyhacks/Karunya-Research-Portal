@@ -5,6 +5,20 @@ import { authorsApi } from "../api/papers";
 import DashboardLayout from "../components/layout/DashboardLayout";
 import { Pagination } from "../components/common";
 
+const DEPARTMENTS = [
+  "Aerospace Engineering",
+  "Agriculture",
+  "Applied Chemistry",
+  "Applied Physics",
+  "Biomedical Engineering",
+  "Biotechnology",
+  "Civil Engineering",
+  "Computer Sciences and Technology",
+  "Management Studies",
+  "Mechanical Engineering"
+];
+
+
 // Helper to get initials for the avatar
 const getInitials = (name) => {
   if (!name) return "U";
@@ -63,10 +77,12 @@ const AuthorCard = ({ author, index }) => {
 };
 
 const AuthorsPage = () => {
-  const { query, setQuery, debouncedQuery, page, setPage, perPage } = useSearch();
+  const { query, setQuery, debouncedQuery, filters, updateFilters, page, setPage, perPage } = useSearch();
+  const selectedDept = filters.department || "";
+
   const { data, loading, error } = useFetch(
-    () => authorsApi.list({ q: debouncedQuery, page, per_page: perPage }), 
-    [debouncedQuery, page]
+    () => authorsApi.list({ q: debouncedQuery, department: selectedDept || undefined, page, per_page: perPage }), 
+    [debouncedQuery, selectedDept, page]
   );
 
   return (
@@ -74,11 +90,18 @@ const AuthorsPage = () => {
       {/* Filter Canvas */}
       <section className="px-10 py-8 bg-surface-container-low border-b border-outline-variant/10">
         <div className="flex items-center gap-4 overflow-x-auto pb-2 scrollbar-hide">
-          <button className="px-6 py-2 bg-secondary text-primary font-bold text-xs uppercase tracking-widest border border-secondary transition-all shrink-0">
+          <button 
+            onClick={() => updateFilters({ department: "" })}
+            className={`px-6 py-2 font-bold text-xs uppercase tracking-widest transition-all shrink-0 ${!selectedDept ? 'bg-secondary text-primary border border-secondary' : 'border border-outline/20 text-on-surface-variant hover:border-primary'}`}
+          >
             All
           </button>
-          {["Computer Science", "ECE", "Mechanical", "Civil", "Biotechnology", "MBA"].map((dept) => (
-            <button key={dept} className="px-6 py-2 border border-outline/20 text-on-surface-variant hover:border-primary font-bold text-xs uppercase tracking-widest transition-all shrink-0">
+          {DEPARTMENTS.map((dept) => (
+            <button 
+              key={dept} 
+              onClick={() => updateFilters({ department: dept })}
+              className={`px-6 py-2 font-bold text-xs uppercase tracking-widest transition-all shrink-0 ${selectedDept === dept ? 'bg-secondary text-primary border border-secondary' : 'border border-outline/20 text-on-surface-variant hover:border-primary'}`}
+            >
               {dept}
             </button>
           ))}

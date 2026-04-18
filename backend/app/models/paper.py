@@ -11,9 +11,10 @@ from sqlalchemy import (
     ForeignKey, 
     Table, 
     JSON,
-    UUID
+    UUID,
+    select
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, column_property
 from sqlalchemy.sql import func
 from ..database import Base
 
@@ -63,6 +64,13 @@ class Author(Base):
     citation_count: Mapped[int] = mapped_column(Integer, default=0)
     is_faculty: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    
+    papers_count: Mapped[int] = column_property(
+        select(func.count(PaperAuthor.paper_id))
+        .where(PaperAuthor.author_id == id)
+        .correlate_except(PaperAuthor)
+        .scalar_subquery()
+    )
 
     # Relationships
     papers: Mapped[List["Paper"]] = relationship(
