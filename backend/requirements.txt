@@ -16,3 +16,7 @@ aiofiles
 aiosqlite
 greenlet
 requests
+python-jose[cryptography]
+passlib[bcrypt]
+bcrypt
+

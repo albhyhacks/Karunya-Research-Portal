@@ -50,12 +50,24 @@ class ScopusClient:
         if isinstance(author_list, dict):
             author_list = [author_list]
             
-        for i, auth in enumerate(author_list):
+            
+            # Check if this author's affiliation matches Karunya (from settings)
+            is_faculty = False
+            affils = auth.get("affiliation", [])
+            if isinstance(affils, dict):
+                affils = [affils]
+            
+            for aff in affils:
+                if aff.get("@id") == settings.SCOPUS_AFFILIATION_ID:
+                    is_faculty = True
+                    break
+
             authors.append({
                 "scopus_author_id": auth.get("@auid", auth.get("authid", "")),
                 "full_name": f"{auth.get('ce:given-name', auth.get('given-name', ''))} {auth.get('ce:surname', auth.get('surname', ''))}".strip() or auth.get("dc:creator", ""),
                 "position": i + 1,
-                "is_corresponding": False
+                "is_corresponding": False,
+                "is_faculty": is_faculty
             })
         return authors
 
@@ -63,25 +75,25 @@ class ScopusClient:
         """Normalize a single Scopus entry into PaperData format.
         
         Handles both:
-        - Search result entries (flat structure with affiliation/keywords at root)
-        - Abstract Retrieval entries (coredata dict, top-level affiliation separate)
+        - Search result entries (flat structure)
+        - Abstract Retrieval entries (nested coredata or bibrecord)
         """
-        scopus_id = entry.get("dc:identifier", "").replace("SCOPUS_ID:", "")
+        # Scopus ID might be in dc:identifier or @id
+        scopus_id = entry.get("dc:identifier", "").replace("SCOPUS_ID:", "") or entry.get("@id", "")
         authors = self._normalize_authors(entry)
 
         # Affiliations: prefer explicitly passed top_level_affiliation (from Abstract API)
-        # otherwise read from flattened search entry root
         affiliations = top_level_affiliation if top_level_affiliation is not None else entry.get("affiliation", [])
         if isinstance(affiliations, dict):
             affiliations = [affiliations]
         countries = [aff.get("affiliation-country", "") for aff in (affiliations or []) if aff.get("affiliation-country")]
         countries = list(set(countries))
         
-        # Open access: Abstract API uses 'openaccess' string "1"/"0", or bool
-        oa = entry.get("openaccess", 0)
+        # Open access
+        oa = entry.get("openaccess", "0")
         is_oa = str(oa).lower() in ("1", "true")
 
-        # Keywords: prefer explicitly passed raw string (from coredata authkeywords)
+        # Keywords
         kw_raw = keywords_raw if keywords_raw is not None else entry.get("authkeywords", "")
         if kw_raw and isinstance(kw_raw, str):
             keywords = [k.strip() for k in kw_raw.split(" | ") if k.strip()]
@@ -90,19 +102,34 @@ class ScopusClient:
         else:
             keywords = []
 
+        # Extraction logic with fallbacks for search vs abstract vs bibrecord
+        title = entry.get("dc:title", entry.get("title", ""))
+        abstract = entry.get("dc:description", entry.get("abstract", ""))
+        year = entry.get("prism:coverDate", entry.get("pub-date", ""))[:4]
+        doi = entry.get("prism:doi", entry.get("doi", ""))
+        journal = entry.get("prism:publicationName", entry.get("sourcetitle", ""))
+        issn = entry.get("prism:issn", entry.get("prism:eIssn", entry.get("issn", "")))
+        
+        # Citations: handle 'citedby-count' vs 'cited-by-count'
+        citations = entry.get("citedby-count", entry.get("cited-by-count", 0))
+        try:
+            citations = int(citations)
+        except (ValueError, TypeError):
+            citations = 0
+
         return {
             "scopus_id": scopus_id,
-            "title": entry.get("dc:title", ""),
-            "abstract": entry.get("dc:description", ""), 
-            "year": entry.get("prism:coverDate", "")[:4],
-            "doi": entry.get("prism:doi", ""),
+            "title": title,
+            "abstract": abstract, 
+            "year": year,
+            "doi": doi,
             "is_open_access": is_oa,
-            "citation_count": int(entry.get("citedby-count", 0)),
-            "journal_name": entry.get("prism:publicationName", ""),
-            "journal_issn": entry.get("prism:issn", entry.get("prism:eIssn", "")),
+            "citation_count": citations,
+            "journal_name": journal,
+            "journal_issn": issn,
             "keywords": keywords,
             "authors": authors,
-            "document_type": entry.get("subtype", ""),
+            "document_type": entry.get("subtype", entry.get("document-type", "")),
             "countries": countries
         }
 
@@ -146,6 +173,20 @@ class ScopusClient:
         response = data.get("abstracts-retrieval-response") or {}
         coredata = response.get("coredata") or {}
         
+        # Fallback for core metadata if coredata is null
+        if not coredata:
+            item = response.get("item", {})
+            bibrecord = item.get("bibrecord", {})
+            head = bibrecord.get("head", {})
+            coredata = {
+                "dc:title": head.get("citation-title", {}).get("titletext", ""),
+                "dc:description": head.get("abstracts", {}).get("abstract", {}).get("ce:para", ""),
+                "prism:publicationName": head.get("source", {}).get("sourcetitle", ""),
+                "prism:issn": head.get("source", {}).get("issn", {}).get("$", ""),
+                "prism:doi": response.get("item", {}).get("ait", {}).get("open-accessinfo", {}).get("doi", ""),
+                "citedby-count": coredata.get("cited-by-count", "0") # already null check above, but for clarity
+            }
+
         # Full authors live at top-level 'authors' -> 'author' when field=authors requested
         authors_section = response.get("authors") or {}
         authors_list = authors_section.get("author", []) if authors_section else []
@@ -167,32 +208,42 @@ class ScopusClient:
             given = pref.get("ce:given-name", auth.get("ce:given-name", auth.get("given-name", "")))
             surname = pref.get("ce:surname", auth.get("ce:surname", auth.get("surname", "")))
             full_name = f"{given} {surname}".strip()
+            
+            # Check affiliation
+            is_faculty = False
+            affils = auth.get("affiliation", [])
+            if isinstance(affils, dict):
+                affils = [affils]
+            for aff in affils:
+                if aff.get("@id") == settings.SCOPUS_AFFILIATION_ID:
+                    is_faculty = True
+                    break
+                    
             normalized_authors.append({
                 "scopus_author_id": auth.get("@auid", auth.get("authid", "")),
                 "full_name": full_name,
                 "position": int(auth.get("@seq", i + 1)),
-                "is_corresponding": False
+                "is_corresponding": False,
+                "is_faculty": is_faculty
             })
         
-        # If no authors found from full section, fall back to dc:creator
-        if not normalized_authors:
-            creator_data = coredata.get("dc:creator", {})
-            if isinstance(creator_data, dict):
-                for auth in creator_data.get("author", []):
-                    pref = auth.get("preferred-name", {})
-                    given = pref.get("ce:given-name", auth.get("ce:given-name", ""))
-                    surname = pref.get("ce:surname", auth.get("ce:surname", ""))
-                    normalized_authors.append({
-                        "scopus_author_id": auth.get("@auid", ""),
-                        "full_name": f"{given} {surname}".strip(),
-                        "position": int(auth.get("@seq", 1)),
-                        "is_corresponding": False
-                    })
+        # Combine coredata with authors info for normalization
+        entry = {**coredata, "authors": {"author": authors_list}, "abstract": coredata.get("dc:description", "")}
+        result = self._normalize_paper(entry, top_level_affiliation=top_level_affiliations, keywords_raw=keywords_raw)
+        result["authors"] = normalized_authors  # override with properly parsed list
+        
+        # The Abstract API's coredata may not always include dc:identifier; inject the known scopus_id
+        if not result.get("scopus_id"):
+            result["scopus_id"] = scopus_id
+        return result
 
         # Combine coredata with authors info for normalization
         entry = {**coredata, "authors": {"author": authors_list}, "abstract": coredata.get("dc:description", "")}
         result = self._normalize_paper(entry, top_level_affiliation=top_level_affiliations, keywords_raw=keywords_raw)
         result["authors"] = normalized_authors  # override with properly parsed list
+        # The Abstract API's coredata may not always include dc:identifier; inject the known scopus_id
+        if not result.get("scopus_id"):
+            result["scopus_id"] = scopus_id
         return result
 
 

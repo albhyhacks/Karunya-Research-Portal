@@ -21,8 +21,8 @@ async def get_overview(db: AsyncSession = Depends(get_db)):
     # Total Papers
     total_papers = await db.scalar(select(func.count()).select_from(Paper))
     
-    # Total Authors
-    total_authors = await db.scalar(select(func.count()).select_from(Author))
+    # Total Authors (Karunya faculty only)
+    total_authors = await db.scalar(select(func.count()).select_from(Author).where(Author.is_faculty == True))
     
     # Total Citations
     total_citations_result = await db.scalar(select(func.sum(Paper.citation_count)))
@@ -136,6 +136,7 @@ async def get_department_breakdown(db: AsyncSession = Depends(get_db)):
         .join(PaperAuthor)
         .join(Paper)
         .where(Author.department.isnot(None))
+        .where(Author.is_faculty == True)
         .group_by(Author.department)
         .order_by(desc(text("paper_count")))
     )
@@ -235,7 +236,7 @@ async def get_output_types_by_department(db: AsyncSession = Depends(get_db)):
     cached = await cache.get(cache_key)
     if cached: return cached
 
-    query = select(Author.department, Paper.document_type, func.count(func.distinct(Paper.id))).join(PaperAuthor, Author.id == PaperAuthor.author_id).join(Paper, Paper.id == PaperAuthor.paper_id).where(Author.department.isnot(None)).group_by(Author.department, Paper.document_type)
+    query = select(Author.department, Paper.document_type, func.count(func.distinct(Paper.id))).join(PaperAuthor, Author.id == PaperAuthor.author_id).join(Paper, Paper.id == PaperAuthor.paper_id).where(Author.department.isnot(None)).where(Author.is_faculty == True).group_by(Author.department, Paper.document_type)
     result = await db.execute(query)
     
     type_map = {
@@ -265,7 +266,7 @@ async def get_researcher_growth(db: AsyncSession = Depends(get_db)):
     cached = await cache.get(cache_key)
     if cached: return cached
 
-    author_query = select(Author.id, Author.full_name, Author.department, Author.h_index).join(PaperAuthor).group_by(Author.id).having(func.count(PaperAuthor.paper_id) >= 5)
+    author_query = select(Author.id, Author.full_name, Author.department, Author.h_index).where(Author.is_faculty == True).join(PaperAuthor).group_by(Author.id).having(func.count(PaperAuthor.paper_id) >= 5)
     authors_result = await db.execute(author_query)
     authors = authors_result.all()
     
@@ -319,11 +320,11 @@ async def get_gaps(db: AsyncSession = Depends(get_db)):
 
     this_year = datetime.now().year
     
-    dept_query = select(Author.department, func.max(Paper.year)).join(PaperAuthor, Author.id == PaperAuthor.author_id).join(Paper, Paper.id == PaperAuthor.paper_id).where(Author.department.isnot(None)).group_by(Author.department)
+    dept_query = select(Author.department, func.max(Paper.year)).join(PaperAuthor, Author.id == PaperAuthor.author_id).join(Paper, Paper.id == PaperAuthor.paper_id).where(Author.department.isnot(None)).where(Author.is_faculty == True).group_by(Author.department)
     dept_res = await db.execute(dept_query)
     depts_no_pub = []
     
-    dept_paper_types_query = select(Author.department, Paper.document_type, func.count(func.distinct(Paper.id))).join(PaperAuthor, Author.id == PaperAuthor.author_id).join(Paper, Paper.id == PaperAuthor.paper_id).where(Author.department.isnot(None)).group_by(Author.department, Paper.document_type)
+    dept_paper_types_query = select(Author.department, Paper.document_type, func.count(func.distinct(Paper.id))).join(PaperAuthor, Author.id == PaperAuthor.author_id).join(Paper, Paper.id == PaperAuthor.paper_id).where(Author.department.isnot(None)).where(Author.is_faculty == True).group_by(Author.department, Paper.document_type)
     dept_type_res = await db.execute(dept_paper_types_query)
     
     dept_totals = {}
@@ -342,7 +343,7 @@ async def get_gaps(db: AsyncSession = Depends(get_db)):
         if not max_year or max_year < this_year - 2:
             depts_no_pub.append({"department": dept, "last_publication_year": max_year})
 
-    author_query = select(Author, func.max(Paper.year), func.count(func.distinct(Paper.id))).join(PaperAuthor, Author.id == PaperAuthor.author_id).join(Paper, Paper.id == PaperAuthor.paper_id).group_by(Author.id)
+    author_query = select(Author, func.max(Paper.year), func.count(func.distinct(Paper.id))).where(Author.is_faculty == True).join(PaperAuthor, Author.id == PaperAuthor.author_id).join(Paper, Paper.id == PaperAuthor.paper_id).group_by(Author.id)
     author_res = await db.execute(author_query)
     authors_no_pub = []
     for a, max_year, count in author_res.all():
@@ -462,7 +463,7 @@ async def get_collaboration(db: AsyncSession = Depends(get_db)):
     cached = await cache.get(cache_key)
     if cached: return cached
 
-    pair_query = select(PaperAuthor.paper_id, Author.department).join(Author, Author.id == PaperAuthor.author_id)
+    pair_query = select(PaperAuthor.paper_id, Author.department).join(Author, Author.id == PaperAuthor.author_id).where(Author.is_faculty == True)
     pair_res = await db.execute(pair_query)
     paper_depts = {}
     for pid, dept in pair_res.all():
@@ -482,7 +483,7 @@ async def get_collaboration(db: AsyncSession = Depends(get_db)):
                 
     internal = [{"dept_a": k[0], "dept_b": k[1], "shared_papers": v} for k, v in matrix.items()]
     
-    auth_pair_query = select(PaperAuthor.paper_id, Author.id, Author.full_name, Author.department).join(Author, Author.id == PaperAuthor.author_id)
+    auth_pair_query = select(PaperAuthor.paper_id, Author.id, Author.full_name, Author.department).join(Author, Author.id == PaperAuthor.author_id).where(Author.is_faculty == True)
     auth_pair_res = await db.execute(auth_pair_query)
     paper_authors = {}
     for pid, aid, name, dept in auth_pair_res.all():

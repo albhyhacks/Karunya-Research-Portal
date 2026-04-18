@@ -29,7 +29,7 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS Middleware
-cors_origins_raw = getattr(settings, "CORS_ORIGINS", "http://localhost:5173")
+cors_origins_raw = getattr(settings, "CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
 cors_origins = [origin.strip() for origin in cors_origins_raw.split(",")]
 
 app.add_middleware(

@@ -19,7 +19,8 @@ async def get_authors(
     per_page: int = Query(20, ge=1, le=50),
     db: AsyncSession = Depends(get_db)
 ):
-    query = select(Author)
+    # Always filter to Karunya faculty only
+    query = select(Author).where(Author.is_faculty == True)
     
     if q:
         query = query.where(Author.full_name.ilike(f"%{q}%"))

@@ -23,13 +23,19 @@ class SyncService:
         }
 
     async def _upsert_paper(self, session: AsyncSession, paper_data: Dict[str, Any]) -> Paper:
-        # Pydantic schema validation would be good here, but using dict for simplicity
+        scopus_id = paper_data["scopus_id"]
+        if not scopus_id:
+            raise ValueError("Paper has no scopus_id, skipping.")
+
+        # Normalize: store blank DOI as NULL to prevent unique constraint collisions
+        doi = paper_data.get("doi") or None
+
         stmt = insert(Paper).values(
-            scopus_id=paper_data["scopus_id"],
-            title=paper_data["title"],
+            scopus_id=scopus_id,
+            title=paper_data["title"] or "(No title)",
             abstract=paper_data["abstract"],
             year=int(paper_data["year"]) if paper_data["year"] else None,
-            doi=paper_data["doi"],
+            doi=doi,
             is_open_access=paper_data["is_open_access"],
             citation_count=paper_data["citation_count"],
             journal_name=paper_data["journal_name"],
@@ -40,22 +46,26 @@ class SyncService:
         ).on_conflict_do_update(
             index_elements=["scopus_id"],
             set_={
+                "title": paper_data["title"] or "(No title)",
+                "abstract": paper_data["abstract"],
+                "year": int(paper_data["year"]) if paper_data["year"] else None,
+                "doi": doi,
                 "citation_count": paper_data["citation_count"],
                 "is_open_access": paper_data["is_open_access"],
+                "journal_name": paper_data["journal_name"],
+                "journal_issn": paper_data["journal_issn"],
+                "keywords": paper_data["keywords"],
                 "document_type": paper_data.get("document_type"),
                 "countries": paper_data.get("countries"),
                 "updated_at": datetime.now()
             }
-        ).returning(Paper)
-        
-        result = await session.execute(stmt)
+        )
+
+        await session.execute(stmt)
+
+        # Fetch the paper after upsert (RETURNING is unreliable in SQLite aiosqlite)
+        result = await session.execute(select(Paper).where(Paper.scopus_id == scopus_id))
         paper = result.scalar_one()
-        
-        # Determine if it was an insert or update for stats
-        # returning(Paper) gives us the object, but we need to know if it existed
-        # This is a bit tricky with on_conflict_do_update. 
-        # For simplicity, we'll increment based on result existence.
-        
         return paper
 
     async def _upsert_author(self, session: AsyncSession, author_data: Dict[str, Any]) -> Author:
@@ -84,9 +94,12 @@ class SyncService:
             scopus_author_id=author_data["scopus_author_id"],
             full_name=author_data["full_name"],
             department=department,
-            is_faculty=True
-        ).on_conflict_do_nothing(
-            index_elements=["scopus_author_id"]
+            is_faculty=author_data.get("is_faculty", False)
+        ).on_conflict_do_update(
+            index_elements=["scopus_author_id"],
+            set_={
+                "is_faculty": author_data.get("is_faculty", False)
+            }
         ).returning(Author)
         
         result = await session.execute(stmt)
@@ -129,37 +142,42 @@ class SyncService:
                     
                     papers_batch = batch_data.get("papers", [])
                     total = batch_data.get("total_results", 0)
+                    total = batch_data.get("total_results", 0)
                     
                     if not papers_batch:
                         break
                     
                     for search_entry in papers_batch:
+                        scopus_id = search_entry.get("scopus_id")
                         try:
-                            scopus_id = search_entry.get("scopus_id")
-                            logger.info(f"Processing paper: {scopus_id} - {search_entry.get('title')[:50]}")
+                            logger.info(f"Processing paper: {scopus_id} - {str(search_entry.get('title', ''))[:50]}")
                             
                             # Fetch full details to get complete author list and metadata
                             paper_data = await self.client.get_paper_details(scopus_id)
                             
-                            async with session.begin_nested():
-                                paper = await self._upsert_paper(session, paper_data)
-                                logger.info(f"  Paper details retrieved. Authors found: {len(paper_data['authors'])}")
-                                for auth_item in paper_data["authors"]:
-                                    if not auth_item.get("scopus_author_id"):
-                                        continue
-                                    logger.info(f"    Author: {auth_item.get('scopus_author_id')} - {auth_item.get('full_name')}")
-                                    author = await self._upsert_author(session, auth_item)
-                                    assoc_stmt = insert(PaperAuthor).values(
-                                        paper_id=paper.id,
-                                        author_id=author.id,
-                                        author_position=auth_item["position"],
-                                        is_corresponding=auth_item["is_corresponding"]
-                                    ).on_conflict_do_nothing()
-                                    await session.execute(assoc_stmt)
-                            self.stats["papers_added"] += 1
+                            # Use savepoint so an individual paper failure doesn't roll back the batch
+                            try:
+                                async with session.begin_nested():
+                                    paper = await self._upsert_paper(session, paper_data)
+                                    logger.info(f"  Paper saved. Authors found: {len(paper_data['authors'])}")
+                                    for auth_item in paper_data["authors"]:
+                                        if not auth_item.get("scopus_author_id"):
+                                            continue
+                                        author = await self._upsert_author(session, auth_item)
+                                        assoc_stmt = insert(PaperAuthor).values(
+                                            paper_id=paper.id,
+                                            author_id=author.id,
+                                            author_position=auth_item["position"],
+                                            is_corresponding=auth_item["is_corresponding"]
+                                        ).on_conflict_do_nothing()
+                                        await session.execute(assoc_stmt)
+                                self.stats["papers_added"] += 1
+                            except Exception as inner_e:
+                                # Savepoint automatically rolls back just this paper
+                                logger.error(f"Error persisting paper {scopus_id}: {inner_e}")
+                                continue
                         except Exception as e:
-                            logger.error(f"Error syncing paper {search_entry.get('scopus_id')}: {e}")
-                            await session.rollback()
+                            logger.error(f"Error fetching paper details {scopus_id}: {e}")
                             continue
                     
                     await session.commit()

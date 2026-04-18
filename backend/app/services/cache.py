@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 class CacheService:
     def __init__(self):
         self._store = {}
-        self.ttl = 3600 # 1 hour
+        self.ttl = 30  # 30 seconds - short TTL to reflect data sync progress
 
     async def get(self, key: str) -> Optional[Any]:
         if key in self._store:

@@ -24,7 +24,15 @@ async def get_papers(
     per_page: int = Query(20, ge=1, le=50),
     db: AsyncSession = Depends(get_db)
 ):
-    query = select(Paper)
+    # Base query: only papers that have at least one verified Karunya author
+    karunya_paper_ids = (
+        select(PaperAuthor.paper_id)
+        .join(Author, Author.id == PaperAuthor.author_id)
+        .where(Author.is_faculty == True)
+        .distinct()
+        .scalar_subquery()
+    )
+    query = select(Paper).where(Paper.id.in_(karunya_paper_ids))
     
     # Simple search for SQLite compatibility
     if q:
