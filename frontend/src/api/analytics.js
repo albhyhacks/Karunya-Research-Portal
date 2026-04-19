@@ -8,7 +8,8 @@ export const analyticsApi = {
   getDepartmentBreakdown: () => api.get("/api/analytics/department-breakdown"),
   getOutputTypes: () => api.get("/api/analytics/output-types"),
   getOutputTypesYearly: () => api.get("/api/analytics/output-types/yearly"),
-  getOutputTypesByDept: () => api.get("/api/analytics/output-types/by-department"),
+  getOutputTypesAvailableYears: () => api.get("/api/analytics/output-types/available-years"),
+  getOutputTypesByDept: (year) => api.get(`/api/analytics/output-types/by-department${year ? `?year=${year}` : ''}`),
   getResearcherGrowth: () => api.get("/api/analytics/researcher-growth"),
   getGaps: () => api.get("/api/analytics/gaps"),
   getCollaboration: () => api.get("/api/analytics/collaboration")

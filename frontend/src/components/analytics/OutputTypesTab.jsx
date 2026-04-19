@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import { useFetch } from "../../hooks/useFetch";
 import { analyticsApi } from "../../api/analytics";
 import { outputTypeColors } from "../../utils/outputTypeColors";
@@ -11,11 +11,14 @@ import {
 export const OutputTypesTab = () => {
   const { data: outputTypes, loading: loadingTypes } = useFetch(analyticsApi.getOutputTypes);
   const { data: yearlyData, loading: loadingYearly } = useFetch(analyticsApi.getOutputTypesYearly);
-  const { data: deptData, loading: loadingDept } = useFetch(analyticsApi.getOutputTypesByDept);
+  const { data: availableYears, loading: loadingYears } = useFetch(analyticsApi.getOutputTypesAvailableYears);
+  const [selectedDeptYear, setSelectedDeptYear] = useState("All");
+  const fetchDeptData = useCallback(() => analyticsApi.getOutputTypesByDept(selectedDeptYear === "All" ? null : selectedDeptYear), [selectedDeptYear]);
+  const { data: deptData, loading: loadingDept } = useFetch(fetchDeptData, [fetchDeptData]);
   
   const [stacked, setStacked] = useState(true);
 
-  if (loadingTypes || loadingYearly || loadingDept) {
+  if (loadingTypes || loadingYearly || loadingDept || loadingYears) {
     return (
       <div className="space-y-8 animate-pulse">
         <div className="flex gap-8">
@@ -172,8 +175,21 @@ export const OutputTypesTab = () => {
 
       {/* SECTION 3 */}
       <div className="bg-surface-container-lowest p-8 border border-outline-variant/10 relative">
-        <div className="absolute top-8 right-8 z-10 flex gap-4">
-          <DownloadCsvButton data={deptChartData} filename="output_by_department" />
+        <div className="absolute top-8 right-8 z-10 flex gap-4 items-center">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-bold text-outline uppercase tracking-wider">Year:</span>
+            <select
+              value={selectedDeptYear}
+              onChange={(e) => setSelectedDeptYear(e.target.value)}
+              className="bg-surface-container text-on-surface text-sm px-3 py-1.5 outline-none border border-outline-variant/30 font-bold focus:border-primary transition-colors cursor-pointer"
+            >
+              <option value="All">All Years</option>
+              {(availableYears || []).map(y => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
+          <DownloadCsvButton data={deptChartData} filename={`output_by_department_${selectedDeptYear}`} />
         </div>
         <h3 className="font-headline text-lg font-bold text-primary mb-6">Output Mix by Department</h3>
         <div className="h-[600px]">

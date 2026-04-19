@@ -20,6 +20,7 @@ export const GapAnalysisTab = () => {
   
   // Combine all department gaps into one status list
   const currentYear = new Date().getFullYear();
+  const departmentTotals = gaps?.department_totals || {};
   
   // We need to fetch all departments to classify them, but we only have gap info.
   // We'll construct a mock list of all departments based on what we have, plus 'Healthy' ones
@@ -29,6 +30,7 @@ export const GapAnalysisTab = () => {
     deptStatuses.push({
       department: d.department,
       lastPublished: d.last_publication_year || 'Unknown',
+      totalPublications: departmentTotals[d.department] || 0,
       status: 'Red',
       badge: 'Inactive',
       issue: 'No publication in 3+ years',
@@ -41,6 +43,7 @@ export const GapAnalysisTab = () => {
       deptStatuses.push({
         department: dName,
         lastPublished: currentYear - 1, // Assume recent
+        totalPublications: departmentTotals[dName] || 0,
         status: 'Amber',
         badge: 'Slowing',
         issue: 'Over-reliant on conferences',
@@ -50,12 +53,13 @@ export const GapAnalysisTab = () => {
   });
 
   // Let's add some mock Green ones to show the traffic light effect since API only returns gaps and we didn't fetch all departments here.
-  const mockHealthy = ["Computer Science", "Electrical Engineering", "Biotechnology"];
+  const mockHealthy = ["Computer Sciences and Technology", "Mechanical Engineering", "Biotechnology"];
   mockHealthy.forEach(dName => {
     if (!deptStatuses.find(d => d.department === dName)) {
       deptStatuses.push({
         department: dName,
         lastPublished: currentYear,
+        totalPublications: departmentTotals[dName] || 0,
         status: 'Green',
         badge: 'Active',
         issue: 'Healthy output mix',
@@ -190,6 +194,7 @@ export const GapAnalysisTab = () => {
               <tr className="border-b-2 border-outline-variant/50 text-on-surface">
                 <th className="py-3 px-4 font-bold">Department</th>
                 <th className="py-3 px-4 font-bold">Last Published</th>
+                <th className="py-3 px-4 font-bold">Publications</th>
                 <th className="py-3 px-4 font-bold">Key Issue</th>
                 <th className="py-3 px-4 font-bold">Status</th>
               </tr>
@@ -199,6 +204,7 @@ export const GapAnalysisTab = () => {
                 <tr key={d.department} className={`border-b border-outline-variant/30 border-l-4 ${borderColor(d.status)} hover:bg-surface-container-highest transition-colors`}>
                   <td className="py-3 px-4 font-bold">{d.department}</td>
                   <td className="py-3 px-4 text-outline">{d.lastPublished}</td>
+                  <td className="py-3 px-4 text-outline">{d.totalPublications}</td>
                   <td className="py-3 px-4">{d.issue}</td>
                   <td className="py-3 px-4">
                     <span className={`px-2 py-1 text-xs border font-bold ${badgeColor(d.status)}`}>

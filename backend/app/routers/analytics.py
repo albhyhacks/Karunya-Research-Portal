@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc, text
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 from ..database import get_db
 from ..models import Paper, Author, PaperAuthor
@@ -151,8 +151,22 @@ async def get_department_breakdown(db: AsyncSession = Depends(get_db)):
     await cache.set(cache_key, data)
     return data
 
+@router.get("/output-types/available-years")
+async def get_output_types_available_years(db: AsyncSession = Depends(get_db)):
+    cache_key = "cache:analytics:output_types_available_years"
+    cached = await cache.get(cache_key)
+    if cached: return cached
+
+    result = await db.execute(
+        select(Paper.year).where(Paper.year.isnot(None)).distinct().order_by(Paper.year.desc())
+    )
+    years = [row[0] for row in result.all()]
+    await cache.set(cache_key, years)
+    return years
+
 @router.get("/output-types")
 async def get_output_types(db: AsyncSession = Depends(get_db)):
+
     cache_key = "cache:analytics:output_types"
     cached = await cache.get(cache_key)
     if cached: return cached
@@ -231,12 +245,17 @@ async def get_output_types_yearly(db: AsyncSession = Depends(get_db)):
     return resp
 
 @router.get("/output-types/by-department")
-async def get_output_types_by_department(db: AsyncSession = Depends(get_db)):
-    cache_key = "cache:analytics:output_types_by_dept"
+async def get_output_types_by_department(year: Optional[int] = None, db: AsyncSession = Depends(get_db)):
+    cache_key = f"cache:analytics:output_types_by_dept:{year if year else 'all'}"
     cached = await cache.get(cache_key)
     if cached: return cached
 
-    query = select(Author.department, Paper.document_type, func.count(func.distinct(Paper.id))).join(PaperAuthor, Author.id == PaperAuthor.author_id).join(Paper, Paper.id == PaperAuthor.paper_id).where(Author.department.isnot(None)).where(Author.is_faculty == True).group_by(Author.department, Paper.document_type)
+    query = select(Author.department, Paper.document_type, func.count(func.distinct(Paper.id))).join(PaperAuthor, Author.id == PaperAuthor.author_id).join(Paper, Paper.id == PaperAuthor.paper_id).where(Author.department.isnot(None)).where(Author.is_faculty == True)
+    
+    if year:
+        query = query.where(Paper.year == year)
+        
+    query = query.group_by(Author.department, Paper.document_type)
     result = await db.execute(query)
     
     type_map = {
@@ -452,7 +471,8 @@ async def get_gaps(db: AsyncSession = Depends(get_db)):
         "emerging_topics": emerging_topics,
         "conference_only_departments": conf_only_depts,
         "no_international_collab_departments": [],
-        "low_impact_journal_pct": 12.5
+        "low_impact_journal_pct": 12.5,
+        "department_totals": dept_totals
     }
     await cache.set(cache_key, resp)
     return resp
