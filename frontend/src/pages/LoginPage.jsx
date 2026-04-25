@@ -29,7 +29,13 @@ const LoginPage = () => {
       // Redirect to that page, or homepage "/dashboard" if it doesn't exist
       navigate(redirectPath || "/dashboard", { replace: true });
     } catch (err) {
-      if (err.message?.includes("401") || err.message?.includes("403")) {
+      const msg = String(err?.message || "").toLowerCase();
+      if (
+        msg.includes("401") ||
+        msg.includes("403") ||
+        msg.includes("incorrect email or password") ||
+        msg.includes("could not validate credentials")
+      ) {
         setError("Invalid email or password.");
       } else {
         setError("Unable to connect to the server. Please try again.");
