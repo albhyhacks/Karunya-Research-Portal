@@ -212,41 +212,68 @@ async def get_output_types(db: AsyncSession = Depends(get_db)):
     return resp
 
 @router.get("/output-types/yearly")
-async def get_output_types_yearly(db: AsyncSession = Depends(get_db)):
-    cache_key = "cache:analytics:output_types_yearly"
+async def get_output_types_yearly(year: Optional[int] = None, month: Optional[int] = None, db: AsyncSession = Depends(get_db)):
+    cache_key = f"cache:analytics:output_types_yearly:{year if year else 'all'}:{month if month else 'all'}"
     cached = await cache.get(cache_key)
     if cached: return cached
 
     this_year = datetime.now().year
-    query = select(Paper.year, Paper.document_type, func.count(Paper.id)).where(Paper.year >= this_year - 10, Paper.year <= this_year).group_by(Paper.year, Paper.document_type)
-    result = await db.execute(query)
     
     type_map = {
         "ar": "Journal Article", "cp": "Conference Paper", 
         "ch": "Book Chapter", "bk": "Book", "re": "Review Article"
     }
-    
-    years = list(range(this_year - 9, this_year + 1))
     types = ["Journal Article", "Conference Paper", "Book Chapter", "Book", "Review Article", "Other"]
-    series_map = {t: {y: 0 for y in years} for t in types}
-    
-    for year, doc_type, count in result.all():
-        if not year or year not in years:
-            continue
-        norm_type = type_map.get(doc_type.lower() if doc_type else "", "Other") if doc_type else "Other"
-        series_map[norm_type][year] += count
+
+    if year:
+        query = select(Paper.month, Paper.document_type, func.count(Paper.id)).where(Paper.year == year)
+        if month:
+            query = query.where(Paper.month == month)
+        query = query.group_by(Paper.month, Paper.document_type)
+        result = await db.execute(query)
         
-    series = [
-        {"type": t, "values": [series_map[t][y] for y in years]}
-        for t in types
-    ]
-    resp = {"years": years, "series": series}
+        month_labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        series_map = {t: {m: 0 for m in range(1, 13)} for t in types}
+        
+        for p_month, doc_type, count in result.all():
+            if not p_month or p_month < 1 or p_month > 12:
+                continue
+            norm_type = type_map.get(doc_type.lower() if doc_type else "", "Other") if doc_type else "Other"
+            series_map[norm_type][p_month] += count
+            
+        series = [
+            {"type": t, "values": [series_map[t][m] for m in range(1, 13)]}
+            for t in types
+        ]
+        resp = {"years": month_labels, "series": series} 
+    else:
+        query = select(Paper.year, Paper.document_type, func.count(Paper.id)).where(Paper.year >= this_year - 10, Paper.year <= this_year)
+        if month:
+            query = query.where(Paper.month == month)
+        query = query.group_by(Paper.year, Paper.document_type)
+        result = await db.execute(query)
+        
+        years = list(range(this_year - 9, this_year + 1))
+        series_map = {t: {y: 0 for y in years} for t in types}
+        
+        for p_year, doc_type, count in result.all():
+            if not p_year or p_year not in years:
+                continue
+            norm_type = type_map.get(doc_type.lower() if doc_type else "", "Other") if doc_type else "Other"
+            series_map[norm_type][p_year] += count
+            
+        series = [
+            {"type": t, "values": [series_map[t][y] for y in years]}
+            for t in types
+        ]
+        resp = {"years": years, "series": series}
+
     await cache.set(cache_key, resp)
-    return resp
+    return resp 
 
 @router.get("/output-types/by-department")
-async def get_output_types_by_department(year: Optional[int] = None, db: AsyncSession = Depends(get_db)):
-    cache_key = f"cache:analytics:output_types_by_dept:{year if year else 'all'}"
+async def get_output_types_by_department(year: Optional[int] = None, month: Optional[int] = None, db: AsyncSession = Depends(get_db)):
+    cache_key = f"cache:analytics:output_types_by_dept:{year if year else 'all'}:{month if month else 'all'}"
     cached = await cache.get(cache_key)
     if cached: return cached
 
@@ -254,6 +281,8 @@ async def get_output_types_by_department(year: Optional[int] = None, db: AsyncSe
     
     if year:
         query = query.where(Paper.year == year)
+    if month:
+        query = query.where(Paper.month == month)
         
     query = query.group_by(Author.department, Paper.document_type)
     result = await db.execute(query)

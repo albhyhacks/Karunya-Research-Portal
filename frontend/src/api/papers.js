@@ -9,6 +9,7 @@ export const authorsApi = {
   list: (params) => api.get("/api/authors/", params),
   get: (id) => api.get(`/api/authors/${id}`),
   getPapers: (id, params) => api.get(`/api/authors/${id}/papers`, params),
+  getDepartmentCounts: () => api.get("/api/authors/department-counts"),
 };
 
 // analyticsApi moved to analytics.js

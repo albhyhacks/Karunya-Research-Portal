@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useFetch, useSearch } from "../hooks/useFetch";
 import { authorsApi } from "../api/papers";
@@ -78,12 +78,21 @@ const AuthorCard = ({ author, index }) => {
 
 const AuthorsPage = () => {
   const { query, setQuery, debouncedQuery, filters, updateFilters, page, setPage, perPage } = useSearch();
+  const [deptCounts, setDeptCounts] = useState({});
   const selectedDept = filters.department || "";
+
+  useEffect(() => {
+    authorsApi.getDepartmentCounts()
+      .then(counts => setDeptCounts(counts))
+      .catch(err => console.error("Failed to fetch department counts:", err));
+  }, []);
 
   const { data, loading, error } = useFetch(
     () => authorsApi.list({ q: debouncedQuery, department: selectedDept || undefined, page, per_page: perPage }), 
     [debouncedQuery, selectedDept, page]
   );
+
+  const totalFaculty = Object.values(deptCounts).reduce((sum, count) => sum + count, 0);
 
   return (
     <DashboardLayout title="Faculty & Researchers" subtitle="Research profiles of Karunya Institute faculty">
@@ -92,17 +101,17 @@ const AuthorsPage = () => {
         <div className="flex items-center gap-4 overflow-x-auto pb-2 scrollbar-hide">
           <button 
             onClick={() => updateFilters({ department: "" })}
-            className={`px-6 py-2 font-bold text-xs uppercase tracking-widest transition-all shrink-0 ${!selectedDept ? 'bg-secondary text-primary border border-secondary' : 'border border-outline/20 text-on-surface-variant hover:border-primary'}`}
+            className={`px-6 py-2 font-bold text-xs uppercase tracking-widest transition-all shrink-0 flex items-center gap-2 ${!selectedDept ? 'bg-secondary text-primary border border-secondary' : 'border border-outline/20 text-on-surface-variant hover:border-primary'}`}
           >
-            All
+            All {totalFaculty > 0 && <span className="opacity-60 text-[10px]">({totalFaculty})</span>}
           </button>
           {DEPARTMENTS.map((dept) => (
             <button 
               key={dept} 
               onClick={() => updateFilters({ department: dept })}
-              className={`px-6 py-2 font-bold text-xs uppercase tracking-widest transition-all shrink-0 ${selectedDept === dept ? 'bg-secondary text-primary border border-secondary' : 'border border-outline/20 text-on-surface-variant hover:border-primary'}`}
+              className={`px-6 py-2 font-bold text-xs uppercase tracking-widest transition-all shrink-0 flex items-center gap-2 ${selectedDept === dept ? 'bg-secondary text-primary border border-secondary' : 'border border-outline/20 text-on-surface-variant hover:border-primary'}`}
             >
-              {dept}
+              {dept} {deptCounts[dept] > 0 && <span className="opacity-60 text-[10px]">({deptCounts[dept]})</span>}
             </button>
           ))}
         </div>

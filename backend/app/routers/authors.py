@@ -45,6 +45,19 @@ async def get_authors(
         "per_page": per_page
     }
 
+@router.get("/department-counts")
+async def get_department_counts(db: AsyncSession = Depends(get_db)):
+    """Return the number of faculty members per department."""
+    query = (
+        select(Author.department, func.count(Author.id).label("count"))
+        .where(Author.is_faculty == True)
+        .where(Author.department != None)
+        .group_by(Author.department)
+    )
+    result = await db.execute(query)
+    rows = result.all()
+    return {row.department: row.count for row in rows}
+
 @router.get("/{author_id}", response_model=AuthorDetail)
 async def get_author(author_id: UUID, db: AsyncSession = Depends(get_db)):
     query = select(Author).where(Author.id == author_id)

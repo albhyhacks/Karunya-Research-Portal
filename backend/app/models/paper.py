@@ -34,6 +34,7 @@ class Paper(Base):
     title: Mapped[str] = mapped_column(Text, nullable=False)
     abstract: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    month: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     doi: Mapped[Optional[str]] = mapped_column(String, unique=True, nullable=True)
     is_open_access: Mapped[bool] = mapped_column(Boolean, default=False)
     citation_count: Mapped[int] = mapped_column(Integer, default=0)

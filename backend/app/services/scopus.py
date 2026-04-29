@@ -105,7 +105,16 @@ class ScopusClient:
         # Extraction logic with fallbacks for search vs abstract vs bibrecord
         title = entry.get("dc:title", entry.get("title", ""))
         abstract = entry.get("dc:description", entry.get("abstract", ""))
-        year = entry.get("prism:coverDate", entry.get("pub-date", ""))[:4]
+        cover_date = entry.get("prism:coverDate", entry.get("pub-date", ""))
+        year = cover_date[:4] if cover_date else ""
+        month = None
+        if cover_date and len(cover_date) >= 7:
+            try:
+                # expecting YYYY-MM-DD
+                month = int(cover_date[5:7])
+            except ValueError:
+                pass
+
         doi = entry.get("prism:doi", entry.get("doi", ""))
         journal = entry.get("prism:publicationName", entry.get("sourcetitle", ""))
         issn = entry.get("prism:issn", entry.get("prism:eIssn", entry.get("issn", "")))
@@ -122,6 +131,7 @@ class ScopusClient:
             "title": title,
             "abstract": abstract, 
             "year": year,
+            "month": month,
             "doi": doi,
             "is_open_access": is_oa,
             "citation_count": citations,
