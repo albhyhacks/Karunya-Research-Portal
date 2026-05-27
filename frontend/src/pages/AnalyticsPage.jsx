@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useFetch } from "../hooks/useFetch";
 import { analyticsApi } from "../api/analytics";
 import DashboardLayout from "../components/layout/DashboardLayout";
-import { OverviewStats, YearlyChart, KeywordCloud } from "../components/analytics";
+import { OverviewStats, YearlyChart, KeywordCloud, ContributorsTab } from "../components/analytics";
 import { OutputTypesTab } from "../components/analytics/OutputTypesTab";
 import { ResearcherGrowthTab } from "../components/analytics/ResearcherGrowthTab";
 import { GapAnalysisTab } from "../components/analytics/GapAnalysisTab";
@@ -11,7 +11,7 @@ import { CollaborationTab } from "../components/analytics/CollaborationTab";
 const AnalyticsPage = () => {
   const [activeTab, setActiveTab] = useState("Overview");
   
-  const tabs = ["Overview", "Output Types", "Researcher Growth", "Gap Analysis", "Collaboration"];
+  const tabs = ["Overview", "Contributors", "Output Types", "Researcher Growth", "Gap Analysis", "Collaboration"];
 
   // Overview Data Fetching
   const { data: overview, loading: overviewLoading } = useFetch(analyticsApi.getOverview);
@@ -75,6 +75,8 @@ const AnalyticsPage = () => {
         {activeTab === "Gap Analysis" && <GapAnalysisTab />}
         
         {activeTab === "Collaboration" && <CollaborationTab />}
+
+        {activeTab === "Contributors" && <ContributorsTab />}
 
       </div>
     </DashboardLayout>

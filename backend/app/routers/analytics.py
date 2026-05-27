@@ -226,40 +226,53 @@ async def get_output_types_yearly(year: Optional[int] = None, month: Optional[in
     types = ["Journal Article", "Conference Paper", "Book Chapter", "Book", "Review Article", "Other"]
 
     if year:
-        query = select(Paper.month, Paper.document_type, func.count(Paper.id)).where(Paper.year == year)
+        sql = text("SELECT month, document_type FROM papers WHERE year = :year")
+        params = {"year": year}
         if month:
-            query = query.where(Paper.month == month)
-        query = query.group_by(Paper.month, Paper.document_type)
-        result = await db.execute(query)
+            sql = text("SELECT month, document_type FROM papers WHERE year = :year AND month = :month")
+            params["month"] = month
+        result = await db.execute(sql, params)
         
         month_labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
         series_map = {t: {m: 0 for m in range(1, 13)} for t in types}
         
-        for p_month, doc_type, count in result.all():
-            if not p_month or p_month < 1 or p_month > 12:
+        for row in result.mappings().all():
+            p_month = row["month"]
+            doc_type = row["document_type"]
+            if p_month is None or int(p_month) < 1 or int(p_month) > 12:
                 continue
-            norm_type = type_map.get(doc_type.lower() if doc_type else "", "Other") if doc_type else "Other"
-            series_map[norm_type][p_month] += count
+            norm_type = type_map.get((doc_type or "").lower(), "Other")
+            series_map[norm_type][int(p_month)] += 1
             
         series = [
             {"type": t, "values": [series_map[t][m] for m in range(1, 13)]}
             for t in types
         ]
-        resp = {"years": month_labels, "series": series} 
+        resp = {"years": month_labels, "series": series}
     else:
-        query = select(Paper.year, Paper.document_type, func.count(Paper.id)).where(Paper.year >= this_year - 10, Paper.year <= this_year)
+        sql_conditions = "year >= :low AND year <= :high"
+        params = {"low": this_year - 9, "high": this_year}
         if month:
-            query = query.where(Paper.month == month)
-        query = query.group_by(Paper.year, Paper.document_type)
-        result = await db.execute(query)
+            sql_conditions += " AND month = :month"
+            params["month"] = month
+        sql = text(f"""
+            SELECT year, document_type, COUNT(id) AS cnt
+            FROM papers
+            WHERE {sql_conditions}
+            GROUP BY year, document_type
+        """)
+        result = await db.execute(sql, params)
         
         years = list(range(this_year - 9, this_year + 1))
         series_map = {t: {y: 0 for y in years} for t in types}
         
-        for p_year, doc_type, count in result.all():
+        for row in result.mappings().all():
+            p_year = row["year"]
+            doc_type = row["document_type"]
+            count = row["cnt"]
             if not p_year or p_year not in years:
                 continue
-            norm_type = type_map.get(doc_type.lower() if doc_type else "", "Other") if doc_type else "Other"
+            norm_type = type_map.get((doc_type or "").lower(), "Other")
             series_map[norm_type][p_year] += count
             
         series = [
@@ -269,7 +282,81 @@ async def get_output_types_yearly(year: Optional[int] = None, month: Optional[in
         resp = {"years": years, "series": series}
 
     await cache.set(cache_key, resp)
-    return resp 
+    return resp
+
+
+@router.get("/output-types/monthly-comparison")
+async def get_monthly_comparison(years: str, db: AsyncSession = Depends(get_db)):
+    """
+    Returns monthly paper counts for up to 3 selected years.
+    `years` is a comma-separated string e.g. "2022,2023,2024".
+    Response shape:
+      {
+        "months": ["Jan","Feb",...,"Dec"],
+        "years": [2022, 2023, 2024],
+        "data": {
+          2022: [3, 5, 0, ...],   # total papers per month
+          2023: [...],
+          2024: [...]
+        },
+        "by_type": {
+          2022: { "Journal Article": [1,2,...], ... },
+          ...
+        },
+        "totals": { 2022: 42, 2023: 57, 2024: 63 }
+      }
+    """
+    try:
+        year_list = [int(y.strip()) for y in years.split(",") if y.strip()][:3]
+    except ValueError:
+        return {"error": "Invalid years parameter"}
+
+    if not year_list:
+        return {"months": [], "years": [], "data": {}, "by_type": {}, "totals": {}}
+
+    cache_key = f"cache:analytics:monthly_comparison:{'-'.join(map(str, sorted(year_list)))}"
+    cached = await cache.get(cache_key)
+    if cached: return cached
+
+    type_map = {
+        "ar": "Journal Article", "cp": "Conference Paper",
+        "ch": "Book Chapter", "bk": "Book", "re": "Review Article"
+    }
+    types = ["Journal Article", "Conference Paper", "Book Chapter", "Book", "Review Article", "Other"]
+    month_labels = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+
+    year_placeholders = ",".join([f":y{i}" for i in range(len(year_list))])
+    sql = text(f"SELECT year, month, document_type FROM papers WHERE year IN ({year_placeholders})")
+    params = {f"y{i}": y for i, y in enumerate(year_list)}
+    result = await db.execute(sql, params)
+
+    # Build structures
+    data = {y: [0] * 12 for y in year_list}
+    by_type = {y: {t: [0] * 12 for t in types} for y in year_list}
+    totals = {y: 0 for y in year_list}
+
+    for row in result.mappings().all():
+        p_year = row["year"]
+        p_month = row["month"]
+        doc_type = row["document_type"]
+        if p_year not in year_list:
+            continue
+        norm_type = type_map.get((doc_type or "").lower(), "Other")
+        totals[p_year] += 1
+        if p_month is not None and 1 <= int(p_month) <= 12:
+            m_idx = int(p_month) - 1
+            data[p_year][m_idx] += 1
+            by_type[p_year][norm_type][m_idx] += 1
+
+    resp = {
+        "months": month_labels,
+        "years": year_list,
+        "data": {str(y): data[y] for y in year_list},
+        "by_type": {str(y): by_type[y] for y in year_list},
+        "totals": {str(y): totals[y] for y in year_list}
+    }
+    await cache.set(cache_key, resp)
+    return resp
 
 @router.get("/output-types/by-department")
 async def get_output_types_by_department(year: Optional[int] = None, month: Optional[int] = None, db: AsyncSession = Depends(get_db)):
@@ -596,5 +683,50 @@ async def get_collaboration(db: AsyncSession = Depends(get_db)):
         "trend": trend_list,
         "top_collaborating_pairs": top_collaborating_pairs
     }
+    await cache.set(cache_key, resp)
+    return resp
+
+@router.get("/contributors-breakdown")
+async def get_contributors_breakdown(year: int, db: AsyncSession = Depends(get_db)):
+    cache_key = f"cache:analytics:contributors_breakdown:{year}"
+    cached = await cache.get(cache_key)
+    if cached: return cached
+
+    # Total papers in the year
+    total_papers_query = select(func.count(Paper.id)).where(Paper.year == year)
+    total_papers = await db.scalar(total_papers_query) or 0
+
+    # Contributors breakdown
+    contributors_query = (
+        select(
+            Author.id, 
+            Author.full_name, 
+            Author.department, 
+            func.count(func.distinct(Paper.id)).label('paper_count')
+        )
+        .join(PaperAuthor, Author.id == PaperAuthor.author_id)
+        .join(Paper, Paper.id == PaperAuthor.paper_id)
+        .where(Paper.year == year)
+        .where(Author.is_faculty == True)
+        .group_by(Author.id, Author.full_name, Author.department)
+        .order_by(desc('paper_count'))
+    )
+    result = await db.execute(contributors_query)
+    
+    contributors = []
+    for row in result.all():
+        contributors.append({
+            "id": str(row[0]),
+            "name": row[1],
+            "department": row[2] or "Unknown",
+            "papers": row[3]
+        })
+
+    resp = {
+        "total_papers": total_papers,
+        "unique_contributors_count": len(contributors),
+        "contributors": contributors
+    }
+    
     await cache.set(cache_key, resp)
     return resp

@@ -65,3 +65,5 @@ export const KeywordCloud = ({ keywords }) => (
     </div>
   </div>
 );
+
+export { ContributorsTab } from './ContributorsTab';

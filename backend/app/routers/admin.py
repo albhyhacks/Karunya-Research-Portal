@@ -124,9 +124,9 @@ async def create_thesis(
     # file.file.seek(0)
     
     # Save file
-    os.makedirs("uploads", exist_ok=True)
+    os.makedirs("data/uploads", exist_ok=True)
     file_uuid = uuid.uuid4()
-    file_path = f"uploads/{file_uuid}.pdf"
+    file_path = f"data/uploads/{file_uuid}.pdf"
     
     with open(file_path, "wb") as f:
         f.write(await file.read())

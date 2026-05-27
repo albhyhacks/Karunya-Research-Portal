@@ -1,0 +1,27 @@
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import asyncio
+from sqlalchemy import select
+from app.database import SessionLocal
+from app.models import Author, Paper
+
+async def check_data():
+    async with SessionLocal() as session:
+        # Check authors
+        result = await session.execute(select(Author).limit(10))
+        authors = result.scalars().all()
+        print("--- SAMPLE AUTHORS ---")
+        for a in authors:
+            print(f"- {a.full_name} (ID: {a.scopus_author_id})")
+        
+        # Check papers/journals
+        result = await session.execute(select(Paper).limit(5))
+        papers = result.scalars().all()
+        print("\n--- SAMPLE JOURNALS ---")
+        for p in papers:
+            print(f"- {p.journal_name}")
+
+if __name__ == "__main__":
+    asyncio.run(check_data())
